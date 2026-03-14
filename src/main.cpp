@@ -30,7 +30,9 @@ int main(int argc, const char *argv[])
     auto ret = yyparse(ast);
     assert(!ret);
 
-    if (string(mode) == "-koopa")
+    if (string(mode) == "-ast")
+        ast->dump();
+    else if (string(mode) == "-koopa")
         ast->dumpIR();
     else if (string(mode) == "-riscv")
     {
