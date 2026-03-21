@@ -290,7 +290,7 @@ Reg visit(const koopa_raw_load_t &load)
 {
     koopa_raw_value_t src = load.src;
     int reg_name = find_reg(1), reg_offset = value_map[src].reg_offset;
-    struct Reg result_var = {reg_name, reg_offset};
+    struct Reg result_var = {reg_name, -1};
     if (reg_offset >= -2048 && reg_offset <= 2047)
         std::cout << "\tlw    " << reg_names[reg_name] << ", " << reg_offset <<
             "(sp)" << std::endl;
