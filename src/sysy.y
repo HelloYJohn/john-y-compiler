@@ -155,6 +155,24 @@ Stmt
         stmt->block_exp = unique_ptr<BaseAST>($3);
         $$ = stmt;
     }
+    | Exp ';' {
+        auto stmt = new SimpleStmtAST();
+        stmt->type = SimpleStmtType::exp;
+        stmt->block_exp = unique_ptr<BaseAST>($1);
+        $$ = stmt;
+    }
+    | ';' {
+        auto stmt = new SimpleStmtAST();
+        stmt->type = SimpleStmtType::exp;
+        stmt->block_exp = nullptr;
+        $$ = stmt;
+    }
+    | Block {
+        auto stmt = new SimpleStmtAST();
+        stmt->type = SimpleStmtType::block;
+        stmt->block_exp = unique_ptr<BaseAST>($1);
+        $$ = stmt;
+    }
     ;
 
 Decl
