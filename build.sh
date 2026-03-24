@@ -4,7 +4,7 @@ usage() {
 }
 if [ $# != 2 ]; then
   usage
-  return 1
+  exit 1
 fi
 if [ "$1" = "-koopa" ]; then
   ./compiler -koopa $2.c -o $2.S
