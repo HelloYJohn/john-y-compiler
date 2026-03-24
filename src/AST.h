@@ -5,6 +5,8 @@
 #include <string>
 #include <memory>
 #include <cassert>
+#include <variant>
+#include <map>
 
 static int symbol_num = 0;
 static int if_else_num = 0;
@@ -13,6 +15,20 @@ enum class UnaryExpType { primary, unary };
 enum class PrimaryExpType { exp, number, lval };
 enum class StmtType { if_, ifelse, simple };
 enum class SimpleStmtType { lval, exp, block, ret };
+enum class DeclType { const_decl, var_decl };
+enum class BlockItemType { decl, stmt };
+static std::vector<std::map<std::string, std::variant<int, std::string>>>
+    symbol_tables;
+static std::map<std::string, int> var_num;
+
+static std::variant<int, std::string> look_up_symbol_tables(std::string l_val)
+{
+    for (auto it = symbol_tables.rbegin(); it != symbol_tables.rend(); it++)
+        if (it->count(l_val))
+            return (*it)[l_val];
+    assert(false);
+    return -1;
+}
 
 class BaseAST
 {
@@ -20,22 +36,29 @@ public:
     virtual ~BaseAST() = default;
     virtual void dump() const = 0;
     virtual std::string dumpIR() const = 0;
+    virtual int dumpExp() const { assert(false); return -1; }
 };
 
 
 class CompUnitAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> func_def;
+    std::vector<std::unique_ptr<BaseAST>> func_def_list;
+    std::vector<std::unique_ptr<BaseAST>> decl_list;
     void dump() const override
     {
         std::cout << "CompUnitAST { ";
-        func_def->dump();
+        for (auto && func_def : func_def_list)
+            func_def->dump();
         std::cout << " }";
     }
     std::string dumpIR() const override
     {
-        return func_def->dumpIR();
+        for (auto && func_def : func_def_list) {
+            func_def->dumpIR();
+            std::cout << std::endl;
+        }
+        return "";
     }
 };
 
@@ -88,19 +111,41 @@ public:
 class BlockAST : public BaseAST
 {
 public:
-    std::unique_ptr<BaseAST> stmt;
+    std::vector<std::unique_ptr<BaseAST>> block_item_list;
     void dump() const override
     {
         std::cout << "BlockAST { ";
-        stmt->dump();
+        for (auto && block_item : block_item_list)
+            block_item->dump();
         std::cout << " }";
     }
     std::string dumpIR() const override
     {
-        return stmt->dumpIR();
+        std::string block_type = "";
+        std::map<std::string, std::variant<int, std::string>> symbol_table;
+        symbol_tables.push_back(symbol_table);
+        for (auto && block_item : block_item_list) {
+            block_type = block_item->dumpIR();
+        }
+        symbol_tables.pop_back();
+        return block_type;
     }
 };
 
+class BlockItemAST : public BaseAST
+{
+public:
+    BlockItemType type;
+    std::unique_ptr<BaseAST> content;
+    void dump() const override
+    {
+        content->dump();
+    }
+    std::string dumpIR() const override
+    {
+        return content->dumpIR();
+    }
+};
 
 class StmtAST: public BaseAST
 {
@@ -142,6 +187,20 @@ public:
             std::cout << "RETURN { ";
             block_exp->dump();
             std::cout << " } ";
+        } else if (type == SimpleStmtType::lval) {
+            std::cout << "LVAL { " << lval << " = ";
+            block_exp->dump();
+            std::cout << " } ";
+        } else if (type == SimpleStmtType::exp) {
+            if (block_exp != nullptr) {
+                std::cout << "EXP { ";
+                block_exp->dump();
+                std::cout << " } ";
+            }
+        } else if (type == SimpleStmtType::block) {
+            std::cout << "BLOCK { ";
+            block_exp->dump();
+            std::cout << " } ";
         }
         else assert(false);
     }
@@ -155,12 +214,173 @@ public:
                 std::string result_var = block_exp->dumpIR();
                 std::cout << '\t' << "ret " << result_var << std::endl;
             }
+        } else if (type == SimpleStmtType::lval) {
+            std::string result_var = block_exp->dumpIR();
+            std::variant<int, std::string> value = look_up_symbol_tables(lval);
+            assert(value.index() == 1);
+            std::cout << "\tstore "  << result_var << ", " << std::get<std::string>(value) << std::endl;
+        } else if (type == SimpleStmtType::exp) {
+            if (block_exp != nullptr) {
+                block_exp->dumpIR();
+            }
+        } else if (type == SimpleStmtType::block) {
+            return block_exp->dumpIR();
         }
         else assert(false);
         return "";
     }
 };
 
+class DeclAST : public BaseAST
+{
+public:
+    DeclType type;
+    std::unique_ptr<BaseAST> decl;
+    void dump() const override
+    {
+        decl->dump();
+    }
+    std::string dumpIR() const override
+    {
+        return decl->dumpIR();
+    }
+};
+
+class ConstDeclAST : public BaseAST
+{
+public:
+    std::string b_type;
+    std::vector<std::unique_ptr<BaseAST>> const_def_list;
+    void dump() const override
+    {
+        assert(b_type == "int");
+        for (auto&& const_def : const_def_list)const_def->dump();
+    }
+    std::string dumpIR() const override
+    {
+        assert(b_type == "int");
+        for (auto&& const_def : const_def_list)const_def->dumpIR();
+        return "";
+    }
+};
+
+
+class ConstDefAST : public BaseAST
+{
+public:
+    std::string ident;
+    std::unique_ptr<BaseAST> const_init_val;
+    void dump() const override
+    {
+        std::cout << "ConstDefAST{" << ident << "=";
+        const_init_val->dump();
+        std::cout << "} ";
+    }
+    std::string dumpIR() const override
+    {
+        symbol_tables.back()[ident] = std::stoi(const_init_val->dumpIR());
+        return "";
+    }
+};
+
+
+class ConstInitValAST : public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> const_exp;
+    void dump() const override
+    {
+        std::cout << const_exp->dumpExp();
+    }
+    std::string dumpIR() const override
+    {
+        return std::to_string(const_exp->dumpExp());
+    }
+};
+
+class ConstExpAST : public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> exp;
+    void dump() const override
+    {
+        std::cout << exp->dumpExp();
+    }
+    std::string dumpIR() const override
+    {
+        return std::to_string(exp->dumpExp());
+    }
+    virtual int dumpExp() const override
+    {
+        return exp->dumpExp();
+    }
+};
+
+class VarDeclAST : public BaseAST
+{
+public:
+    std::string b_type;
+    std::vector<std::unique_ptr<BaseAST>> var_def_list;
+    void dump() const override
+    {
+        assert(b_type == "int");
+        for (auto&& var_def : var_def_list)var_def->dump();
+    }
+    std::string dumpIR() const override
+    {
+        assert(b_type == "int");
+        for (auto&& var_def : var_def_list)var_def->dumpIR();
+        return "";
+    }
+};
+
+
+class VarDefAST : public BaseAST
+{
+public:
+    std::string ident;
+    bool has_init_val;
+    std::unique_ptr<BaseAST> init_val;
+    void dump() const override
+    {
+        std::cout << "VarDefAST{" << ident;
+        if (has_init_val)
+        {
+            std::cout << "=";
+            init_val->dump();
+        }
+        std::cout << "} ";
+    }
+    std::string dumpIR() const override
+    {
+        std::string var_name = "@" + ident;
+        std::string name = var_name + "_" +
+            std::to_string(var_num[var_name]++);
+        std::cout << '\t' << name << " = alloc i32" << std::endl;
+        symbol_tables.back()[ident] = name;
+        if (has_init_val)
+        {
+            std::string val_var = init_val->dumpIR();
+            std::cout << "\tstore " << val_var << ", " << name << std::endl;
+        }
+        return "";
+    }
+};
+
+
+class InitValAST : public BaseAST
+{
+public:
+    std::unique_ptr<BaseAST> exp;
+    void dump() const override
+    {
+        exp->dump();
+    }
+    std::string dumpIR() const override
+    {
+        return exp->dumpIR();
+    }
+};
 
 class ExpAST : public BaseAST
 {
@@ -175,6 +395,11 @@ public:
     std::string dumpIR() const override
     {
         return l_or_exp->dumpIR();
+    }
+
+    virtual int dumpExp() const override
+    {
+        return l_or_exp->dumpExp();
     }
 };
 
@@ -228,6 +453,20 @@ public:
         else assert(false);
         return result_var;
     }
+
+    virtual int dumpExp() const override
+    {
+        int result = 1;
+        if (op == "")result = l_and_exp->dumpExp();
+        else if (op == "||")
+        {
+            int left_result = l_or_exp->dumpExp();
+            if (left_result)return 1;
+            result = l_and_exp->dumpExp() != 0;
+        }
+        else assert(false);
+        return result;
+    }
 };
 
 
@@ -280,6 +519,20 @@ public:
         else assert(false);
         return result_var;
     }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (op == "")result = eq_exp->dumpExp();
+        else if (op == "&&")
+        {
+            int left_result = l_and_exp->dumpExp();
+            if (left_result == 0)return 0;
+            result = eq_exp->dumpExp() != 0;
+        }
+        else assert(false);
+        return result;
+    }
 };
 
 
@@ -317,6 +570,21 @@ public:
             else assert(false);
         }
         return result_var;
+    }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (op == "")result = rel_exp->dumpExp();
+        else
+        {
+            int left_result = eq_exp->dumpExp();
+            int right_result = rel_exp->dumpExp();
+            if (op == "==")result = left_result == right_result;
+            else if (op == "!=")result = left_result != right_result;
+            else assert(false);
+        }
+        return result;
     }
 };
 
@@ -362,6 +630,23 @@ public:
         }
         return result_var;
     }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (op == "")result = add_exp->dumpExp();
+        else
+        {
+            int left_result = rel_exp->dumpExp();
+            int right_result = add_exp->dumpExp();
+            if (op == ">")result = left_result > right_result;
+            else if (op == ">=")result = left_result >= right_result;
+            else if (op == "<")result = left_result < right_result;
+            else if (op == "<=")result = left_result <= right_result;
+            else assert(false);
+        }
+        return result;
+    }
 };
 
 
@@ -399,6 +684,21 @@ public:
             else assert(false);
         }
         return result_var;
+    }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (op == "")result = mul_exp->dumpExp();
+        else
+        {
+            int left_result = add_exp->dumpExp();
+            int right_result = mul_exp->dumpExp();
+            if (op == "+")result = left_result + right_result;
+            else if (op == "-")result = left_result - right_result;
+            else assert(false);
+        }
+        return result;
     }
 };
 
@@ -441,6 +741,22 @@ public:
         }
         return result_var;
     }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (op == "")result = unary_exp->dumpExp();
+        else
+        {
+            int left_result = mul_exp->dumpExp();
+            int right_result = unary_exp->dumpExp();
+            if (op == "*")result = left_result * right_result;
+            else if (op == "/")result = left_result / right_result;
+            else if (op == "%")result = left_result % right_result;
+            else assert(false);
+        }
+        return result;
+    }
 };
 
 
@@ -472,6 +788,22 @@ public:
             return next_var;
         }
     }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (type == UnaryExpType::primary)result = exp->dumpExp();
+        else if (type == UnaryExpType::unary)
+        {
+            int tmp = exp->dumpExp();
+            if (op == "+")result = tmp;
+            else if (op == "-")result = -tmp;
+            else if (op == "!")result = !tmp;
+            else assert(false);
+        }
+        else assert(false);
+        return result;
+    }
 };
 
 
@@ -486,7 +818,7 @@ public:
     {
         if (type == PrimaryExpType::exp)exp->dump();
         else if (type == PrimaryExpType::number)std::cout << number;
-        else if (type == PrimaryExpType::lval)assert(false);
+        else if (type == PrimaryExpType::lval) std::cout << lval;
         else assert(false);
     }
     std::string dumpIR() const override
@@ -495,9 +827,33 @@ public:
         if (type == PrimaryExpType::exp)result_var = exp->dumpIR();
         else if (type == PrimaryExpType::number)
             result_var = std::to_string(number);
-        else if (type == PrimaryExpType::lval)assert(false);
+        else if (type == PrimaryExpType::lval)
+        {
+            std::variant<int, std::string> value = look_up_symbol_tables(lval);
+            if (value.index() == 0)
+                result_var = std::to_string(std::get<int>(value));
+            else if (value.index() == 1) {
+                result_var = "%" + std::to_string(symbol_num++);
+                std::cout << '\t' << result_var << " = load " << std::get<std::string>(value) << std::endl;
+            }
+        }
         else assert(false);
         return result_var;
+    }
+
+    virtual int dumpExp() const override
+    {
+        int result = 0;
+        if (type == PrimaryExpType::exp)result = exp->dumpExp();
+        else if (type == PrimaryExpType::number)result = number;
+        else if (type == PrimaryExpType::lval)
+        {
+            std::variant<int, std::string> value = look_up_symbol_tables(lval);
+            assert(value.index() == 0);
+            result = std::get<int>(value);
+        }
+        else assert(false);
+        return result;
     }
 };
 
