@@ -10,7 +10,6 @@
 
 static int symbol_num = 0;
 static int if_else_num = 0;
-static int other_num = 0;
 enum class UnaryExpType { primary, unary };
 enum class PrimaryExpType { exp, number, lval };
 enum class StmtType { if_, ifelse, simple };
