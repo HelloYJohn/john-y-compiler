@@ -28,7 +28,7 @@ using namespace std;
     std::vector<std::unique_ptr<BaseAST>> *vec_val;
 }
 
-%token INT VOID CONST RETURN
+%token INT VOID CONST RETURN IF ELSE
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token <str_val> LE GE EQ NE AND OR
@@ -155,18 +155,38 @@ Stmt
         stmt->block_exp = unique_ptr<BaseAST>($3);
         $$ = stmt;
     }
+
     | Exp ';' {
         auto stmt = new SimpleStmtAST();
         stmt->type = SimpleStmtType::exp;
         stmt->block_exp = unique_ptr<BaseAST>($1);
         $$ = stmt;
     }
+
     | ';' {
         auto stmt = new SimpleStmtAST();
         stmt->type = SimpleStmtType::exp;
         stmt->block_exp = nullptr;
         $$ = stmt;
     }
+
+    | IF '(' Exp ')' Stmt {
+        auto stmt = new StmtAST();
+        stmt->stmt_type = StmtType::if_;
+        stmt->exp_simple = unique_ptr<BaseAST>($3);
+        stmt->if_stmt = unique_ptr<BaseAST>($5);
+        $$ = stmt;
+    }
+
+    | IF '(' Exp ')' Stmt ELSE Stmt {
+        auto stmt = new StmtAST();
+        stmt->stmt_type = StmtType::ifelse;
+        stmt->exp_simple = unique_ptr<BaseAST>($3);
+        stmt->if_stmt = unique_ptr<BaseAST>($5);
+        stmt->if_else_stmt = unique_ptr<BaseAST>($7);
+        $$ = stmt;
+    }
+
     | Block {
         auto stmt = new SimpleStmtAST();
         stmt->type = SimpleStmtType::block;
