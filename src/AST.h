@@ -156,19 +156,73 @@ public:
     std::string stmt;
     void dump() const override
     {
-        std::cout << "StmtAST { ";
-        exp_simple->dump();
-        std::cout << " }";
+        if (stmt_type == StmtType::simple)
+        {
+            std::cout << "StmtAST { ";
+            exp_simple->dump();
+            std::cout << " }";
+        }
+        else if (stmt_type == StmtType::if_)
+        {
+            std::cout << "IfStmtAST { ";
+            if_stmt->dump();
+            std::cout << " }";
+        }
+        else if (stmt_type == StmtType::ifelse)
+        {
+            std::cout << "IfStmtAST { ";
+            if_stmt->dump();
+            std::cout << " }";
+            std::cout << "ElseStmtAST { ";
+            if_else_stmt->dump();
+            std::cout << " }";
+        }
+        else assert(false);
+        
     }
     std::string dumpIR() const override
     {
         if (stmt_type == StmtType::simple)
         {
             return exp_simple->dumpIR();
-        } else {
+        }
+        else if (stmt_type == StmtType::if_)
+        {
+            std::string cond_result = exp_simple->dumpIR();
+            std::string then_label = "\%then_" + std::to_string(if_else_num);
+            std::string end_label = "\%end_" + std::to_string(if_else_num++);
+            std::cout << "\tbr " << cond_result << ", " << then_label << ", "
+                << end_label << std::endl;
+            std::cout << then_label << ":" << std::endl;
+            std::string if_stmt_type = if_stmt->dumpIR();
+            if (if_stmt_type != "ret" && if_stmt_type != "break" &&
+                if_stmt_type != "cont")
+                std::cout << "\tjump " << end_label << std::endl;
+            std::cout << end_label << ":" << std::endl;
+        }
+        else if (stmt_type == StmtType::ifelse)
+        {
+            std::string cond_result = exp_simple->dumpIR();
+            std::string then_label = "\%then_" + std::to_string(if_else_num);
+            std::string else_label = "\%else_" + std::to_string(if_else_num);
+            std::string end_label = "\%end_" + std::to_string(if_else_num++);
+            std::cout << "\tbr " << cond_result << ", " << then_label << ", "
+                << else_label << std::endl;
+            std::cout << then_label << ":" << std::endl;
+            std::string if_stmt_type = if_stmt->dumpIR();
+            if (if_stmt_type != "ret" && if_stmt_type != "break" &&
+                if_stmt_type != "cont")
+                std::cout << "\tjump " << end_label << std::endl;
+            std::cout << else_label << ":" << std::endl;
+            std::string if_else_stmt_type = if_else_stmt->dumpIR();
+            if (if_else_stmt_type != "ret" && if_else_stmt_type != "break" &&
+                if_else_stmt_type != "cont")
+                std::cout << "\tjump " << end_label << std::endl;
+            std::cout << end_label << ":" << std::endl;
+        }
+        else {
             assert(false);
         } 
-        std::cout << "\tret 0" << std::endl;
         return "";
     }
 };
@@ -226,7 +280,7 @@ public:
             return block_exp->dumpIR();
         }
         else assert(false);
-        return "";
+        return "ret";
     }
 };
 
