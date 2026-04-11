@@ -10,14 +10,16 @@
 
 static int symbol_num = 0;
 static int if_else_num = 0;
+static int while_num = 0;
 enum class UnaryExpType { primary, unary };
 enum class PrimaryExpType { exp, number, lval };
-enum class StmtType { if_, ifelse, simple };
-enum class SimpleStmtType { lval, exp, block, ret };
+enum class StmtType { if_, ifelse, while_, simple };
+enum class SimpleStmtType { lval, exp, block, ret, continue_, break_ };
 enum class DeclType { const_decl, var_decl };
 enum class BlockItemType { decl, stmt };
 static std::vector<std::map<std::string, std::variant<int, std::string>>> symbol_tables;
 static std::map<std::string, int> var_num;
+static std::vector<int> whilestack;
 
 static std::variant<int, std::string> look_up_symbol_tables(std::string l_val) {
     for (auto it = symbol_tables.rbegin(); it != symbol_tables.rend(); it++)
@@ -137,6 +139,7 @@ class StmtAST : public BaseAST {
     std::unique_ptr<BaseAST> exp_simple;
     std::unique_ptr<BaseAST> if_stmt;
     std::unique_ptr<BaseAST> if_else_stmt;
+    std::unique_ptr<BaseAST> while_stmt;
     std::string stmt;
     void dump() const override {
         if (stmt_type == StmtType::simple) {
@@ -157,6 +160,12 @@ class StmtAST : public BaseAST {
             std::cout << " }";
             std::cout << "ElseStmtAST { ";
             if_else_stmt->dump();
+            std::cout << " }";
+        } else if (stmt_type == StmtType::while_) {
+            std::cout << "WhileStmtAST ";
+            exp_simple->dump();
+            std::cout << " { ";
+            while_stmt->dump();
             std::cout << " }";
         } else
             assert(false);
@@ -192,6 +201,22 @@ class StmtAST : public BaseAST {
                 if_else_stmt_type != "cont")
                 std::cout << "\tjump " << end_label << std::endl;
             std::cout << end_label << ":" << std::endl;
+        } else if (stmt_type == StmtType::while_) {
+            whilestack.push_back(while_num);
+            std::string while_entry_label = "\%whileentry_" + std::to_string(while_num);
+            std::string while_body_label = "\%whilebody_" + std::to_string(while_num);
+            std::string while_end_label = "\%whileend_" + std::to_string(while_num++);
+            std::cout << "\tjump " << while_entry_label << std::endl;
+            std::cout << while_entry_label << ":" << std::endl;
+            std::string cond_result = exp_simple->dumpIR();
+            std::cout << "\tbr " << cond_result << ", " << while_body_label << ", " << while_end_label
+                      << std::endl;
+            std::cout << while_body_label << ":" << std::endl;
+            std::string while_stmt_type = while_stmt->dumpIR();
+            if (while_stmt_type != "ret" && while_stmt_type != "break" && while_stmt_type != "cont")
+                std::cout << "\tjump " << while_entry_label << std::endl;
+            std::cout << while_end_label << ":" << std::endl;
+            whilestack.pop_back();
         } else {
             assert(false);
         }
@@ -223,6 +248,10 @@ class SimpleStmtAST : public BaseAST {
             std::cout << "BLOCK { ";
             block_exp->dump();
             std::cout << " } ";
+        } else if (type == SimpleStmtType::continue_) {
+            std::cout << "CONTINUE";
+        } else if (type == SimpleStmtType::break_) {
+            std::cout << "BREAK";
         } else
             assert(false);
     }
@@ -247,6 +276,16 @@ class SimpleStmtAST : public BaseAST {
             }
         } else if (type == SimpleStmtType::block) {
             return block_exp->dumpIR();
+        } else if (type == SimpleStmtType::continue_) {
+                assert(!whilestack.empty());
+                std::string while_entry_label = "\%whileentry_" + std::to_string(whilestack.back());
+                std::cout << "\tjump " << while_entry_label << std::endl;
+                return "cont";
+            } else if (type == SimpleStmtType::break_) {
+                assert(!whilestack.empty());
+                std::string while_end_label = "\%whileend_" + std::to_string(whilestack.back());
+                std::cout << "\tjump " << while_end_label << std::endl;
+                return "break";
         } else
             assert(false);
         return "";

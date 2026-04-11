@@ -28,7 +28,7 @@ using namespace std;
     std::vector<std::unique_ptr<BaseAST>> *vec_val;
 }
 
-%token INT VOID CONST RETURN IF ELSE
+%token INT VOID CONST RETURN IF ELSE WHILE CONTINUE BREAK
 %token <str_val> IDENT
 %token <int_val> INT_CONST
 %token <str_val> LE GE EQ NE AND OR
@@ -193,6 +193,28 @@ Stmt:
         stmt->exp_simple = unique_ptr<BaseAST>($3);
         stmt->if_stmt = unique_ptr<BaseAST>($5);
         stmt->if_else_stmt = unique_ptr<BaseAST>($7);
+        $$ = stmt;
+    }
+
+    | WHILE '(' Exp ')' Stmt {
+        auto stmt = new StmtAST();
+        stmt->stmt_type = StmtType::while_;
+        stmt->exp_simple = unique_ptr<BaseAST>($3);
+        stmt->while_stmt = unique_ptr<BaseAST>($5);
+        $$ = stmt;
+    }
+
+    | CONTINUE ';' {
+        auto stmt = new SimpleStmtAST();
+        stmt->type = SimpleStmtType::continue_;
+        stmt->block_exp = nullptr;
+        $$ = stmt;
+    }
+
+    | BREAK ';' {
+        auto stmt = new SimpleStmtAST();
+        stmt->type = SimpleStmtType::break_;
+        stmt->block_exp = nullptr;
         $$ = stmt;
     }
 
