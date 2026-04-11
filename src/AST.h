@@ -287,7 +287,7 @@ public:
             return block_exp->dumpIR();
         }
         else assert(false);
-        return "";
+        return "ret";
     }
 };
 
