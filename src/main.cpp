@@ -1,20 +1,19 @@
+#include "AST.h"
+#include "RISCV.h"
+#include "koopa.h"
 #include <cassert>
 #include <cstdio>
 #include <iostream>
-#include <sstream>
 #include <memory>
+#include <sstream>
 #include <string>
-#include "AST.h"
-#include "koopa.h"
-#include "RISCV.h"
 #define _SUB_MODE
 using namespace std;
 
-extern FILE *yyin;
-extern int yyparse(unique_ptr<BaseAST> &ast);
+extern FILE* yyin;
+extern int yyparse(unique_ptr<BaseAST>& ast);
 
-int main(int argc, const char *argv[])
-{
+int main(int argc, const char* argv[]) {
     assert(argc == 5);
     auto mode = argv[1];
     auto input = argv[2];
@@ -34,8 +33,7 @@ int main(int argc, const char *argv[])
         ast->dump();
     else if (string(mode) == "-koopa")
         ast->dumpIR();
-    else if (string(mode) == "-riscv")
-    {
+    else if (string(mode) == "-riscv") {
         stringstream ss;
         streambuf* cout_buf = cout.rdbuf();
         cout.rdbuf(ss.rdbuf());
@@ -53,8 +51,7 @@ int main(int argc, const char *argv[])
         freopen(output, "w", stdout);
         visit(raw);
         koopa_delete_raw_program_builder(builder);
-    }
-    else
+    } else
         cout << "NotImplementedError" << endl;
     cout << endl;
     return 0;
