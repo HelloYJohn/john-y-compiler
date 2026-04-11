@@ -125,6 +125,8 @@ public:
         symbol_tables.push_back(symbol_table);
         for (auto && block_item : block_item_list) {
             block_type = block_item->dumpIR();
+            if (block_type == "ret" || block_type == "break" || block_type == "cont")
+                break;
         }
         symbol_tables.pop_back();
         return block_type;
@@ -164,13 +166,17 @@ public:
         }
         else if (stmt_type == StmtType::if_)
         {
-            std::cout << "IfStmtAST { ";
+            std::cout << "IfStmtAST ";
+            exp_simple->dump();
+            std::cout << " { ";
             if_stmt->dump();
             std::cout << " }";
         }
         else if (stmt_type == StmtType::ifelse)
         {
-            std::cout << "IfStmtAST { ";
+            std::cout << "IfStmtAST ";
+            exp_simple->dump();
+            std::cout << " { ";
             if_stmt->dump();
             std::cout << " }";
             std::cout << "ElseStmtAST { ";
@@ -267,6 +273,7 @@ public:
                 std::string result_var = block_exp->dumpIR();
                 std::cout << '\t' << "ret " << result_var << std::endl;
             }
+            return "ret";
         } else if (type == SimpleStmtType::lval) {
             std::string result_var = block_exp->dumpIR();
             std::variant<int, std::string> value = look_up_symbol_tables(lval);

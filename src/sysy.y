@@ -37,6 +37,7 @@ using namespace std;
 %type <ast_val> FuncDef FuncType Block Stmt Exp PrimaryExp UnaryExp AddExp
 %type <ast_val> MulExp RelExp EqExp LAndExp LOrExp
 %type <ast_val> Decl ConstDecl ConstDef
+%type <ast_val> FuncOrDecl
 %type <ast_val> ConstInitVal BlockItem ConstExp
 %type <ast_val> VarDecl VarDef InitVal
 %type <ast_val> CompUnit CompUnitList
@@ -44,16 +45,31 @@ using namespace std;
 %type <int_val> Number
 %type <str_val> LVal Type
 
+%nonassoc IFX
+%nonassoc ELSE
 %%
-CompUnit
-    : CompUnitList {
+CompUnit:
+    CompUnitList {
         auto comp_unit = unique_ptr<BaseAST>($1);
         ast = std::move(comp_unit);
     }
     ;
 
-CompUnitList
-    : FuncDef {
+CompUnitList:
+    FuncOrDecl {
+        auto comp_unit = (CompUnitAST*)($1);
+        $$ = comp_unit;
+    }
+    | CompUnitList FuncOrDecl {
+        auto comp_unit = (CompUnitAST*)($1);
+        auto func_or_decl = unique_ptr<BaseAST>($2);
+        comp_unit->func_def_list.push_back(std::move(func_or_decl));
+        $$ = comp_unit;
+    }
+    ;
+
+FuncOrDecl:
+    FuncDef {
         auto comp_unit = new CompUnitAST();
         auto func_def = unique_ptr<BaseAST>($1);
         comp_unit->func_def_list.push_back(std::move(func_def));
@@ -65,22 +81,10 @@ CompUnitList
         comp_unit->decl_list.push_back(std::move(decl));
         $$ = comp_unit;
     }
-    | CompUnitList FuncDef {
-        auto comp_unit = (CompUnitAST*)($1);
-        auto func_def = unique_ptr<BaseAST>($2);
-        comp_unit->func_def_list.push_back(std::move(func_def));
-        $$ = comp_unit;
-    }
-    | CompUnitList Decl {
-        auto comp_unit = (CompUnitAST*)($1);
-        auto decl = unique_ptr<BaseAST>($2);
-        comp_unit->decl_list.push_back(std::move(decl));
-        $$ = comp_unit;
-    }
     ;
 
-FuncDef
-    : FuncType IDENT '(' ')' Block {
+FuncDef:
+    FuncType IDENT '(' ')' Block {
         auto func_def = new FuncDefAST();
         func_def->func_type = unique_ptr<BaseAST>($1);
         func_def->ident = *unique_ptr<string>($2);
@@ -89,27 +93,32 @@ FuncDef
     }
     ;
 
-FuncType
-    : INT {
+FuncType:
+    INT {
         auto func_type = new FuncTypeAST();
         func_type->func_type_name = "int";
         $$ = func_type;
     }
     ;
 
-Block
-    : '{' BlockItemList '}' {
+Block:
+    '{' BlockItemList '}' {
         auto block = new BlockAST();
         vector<unique_ptr<BaseAST>> *v_ptr = ($2);
         for (auto it = v_ptr->begin(); it != v_ptr->end(); ++it)
             block->block_item_list.push_back(std::move(*it));
         $$ = block;
     }
+    | '{' '}' {
+        auto block = new BlockAST();
+        $$ = block;
+    }
     ;
 
-BlockItemList
-    : {
+BlockItemList:
+    BlockItem {
         vector<unique_ptr<BaseAST>> *v = new vector<unique_ptr<BaseAST>>;
+        v->push_back(unique_ptr<BaseAST>($1));
         $$ = v;
     }
     | BlockItemList BlockItem {
@@ -119,8 +128,8 @@ BlockItemList
     }
     ;
 
-BlockItem
-    : Stmt {
+BlockItem:
+    Stmt {
         auto block_item = new BlockItemAST();
         block_item->type = BlockItemType::stmt;
         block_item->content = unique_ptr<BaseAST>($1);
@@ -134,8 +143,8 @@ BlockItem
     }
     ;
 
-Stmt
-    : RETURN Exp ';' {
+Stmt:
+    RETURN Exp ';' {
         auto stmt = new SimpleStmtAST();
         stmt->type = SimpleStmtType::ret;
         stmt->block_exp = unique_ptr<BaseAST>($2);
@@ -170,7 +179,7 @@ Stmt
         $$ = stmt;
     }
 
-    | IF '(' Exp ')' Stmt {
+    | IF '(' Exp ')' Stmt %prec IFX {
         auto stmt = new StmtAST();
         stmt->stmt_type = StmtType::if_;
         stmt->exp_simple = unique_ptr<BaseAST>($3);
@@ -195,8 +204,8 @@ Stmt
     }
     ;
 
-Decl
-    : ConstDecl {
+Decl:
+    ConstDecl {
         auto decl = new DeclAST();
         decl->type = DeclType::const_decl;
         decl->decl = unique_ptr<BaseAST>($1);
@@ -210,8 +219,8 @@ Decl
     }
     ;
 
-ConstDecl
-    : CONST Type ConstDefList ';' {
+ConstDecl:
+    CONST Type ConstDefList ';' {
         auto const_decl = new ConstDeclAST();
         const_decl->b_type = *unique_ptr<string>($2);
         vector<unique_ptr<BaseAST>> *v_ptr = ($3);
@@ -221,8 +230,8 @@ ConstDecl
     }
     ;
 
-ConstDefList
-    : ConstDef {
+ConstDefList:
+    ConstDef {
         vector<unique_ptr<BaseAST>> *v = new vector<unique_ptr<BaseAST>>;
         v->push_back(unique_ptr<BaseAST>($1));
         $$ = v;
@@ -234,8 +243,8 @@ ConstDefList
     }
     ;
 
-ConstDef
-    : IDENT '=' ConstInitVal {
+ConstDef:
+    IDENT '=' ConstInitVal {
         auto const_def = new ConstDefAST();
         const_def->ident = *unique_ptr<string>($1);
         const_def->const_init_val = unique_ptr<BaseAST>($3);
@@ -243,24 +252,24 @@ ConstDef
     }
     ;
 
-ConstInitVal
-    : ConstExp {
+ConstInitVal:
+    ConstExp {
         auto const_init_val = new ConstInitValAST();
         const_init_val->const_exp = unique_ptr<BaseAST>($1);
         $$ = const_init_val;
     }
     ;
 
-ConstExp
-    : Exp {
+ConstExp:
+    Exp {
         auto const_exp = new ConstExpAST();
         const_exp->exp = unique_ptr<BaseAST>($1);
         $$ = const_exp;
     }
     ;
 
-VarDecl
-    : Type VarDefList ';' {
+VarDecl:
+    Type VarDefList ';' {
         auto var_decl = new VarDeclAST();
         var_decl->b_type = *unique_ptr<string>($1);
         vector<unique_ptr<BaseAST>> *v_ptr = ($2);
@@ -270,8 +279,8 @@ VarDecl
     }
     ;
 
-VarDefList
-    : VarDef {
+VarDefList:
+    VarDef {
         vector<unique_ptr<BaseAST>> *v = new vector<unique_ptr<BaseAST>>;
         v->push_back(unique_ptr<BaseAST>($1));
         $$ = v;
@@ -283,8 +292,8 @@ VarDefList
     }
     ;
 
-VarDef
-    : IDENT {
+VarDef:
+    IDENT {
         auto var_def = new VarDefAST();
         var_def->ident = *unique_ptr<string>($1);
         var_def->has_init_val = false;
@@ -299,16 +308,16 @@ VarDef
     }
     ;
 
-InitVal
-    : Exp {
+InitVal:
+    Exp {
         auto init_val = new InitValAST();
         init_val->exp = unique_ptr<BaseAST>($1);
         $$ = init_val;
     }
     ;
 
-Type
-    : INT {
+Type:
+    INT {
         auto *type = new string("int");
         $$ = type;
     }
@@ -318,22 +327,22 @@ Type
     }
     ;
 
-Number
-    : INT_CONST {
+Number:
+    INT_CONST {
         $$ = ($1);
     }
     ;
 
-Exp
-    : LOrExp {
+Exp:
+    LOrExp {
         auto exp = new ExpAST();
         exp->l_or_exp = unique_ptr<BaseAST>($1);
         $$ = exp;
     }
     ;
 
-LOrExp
-    : LAndExp {
+LOrExp:
+    LAndExp {
         auto l_or_exp = new LOrExpAST();
         l_or_exp->op = "";
         l_or_exp->l_and_exp = unique_ptr<BaseAST>($1);
@@ -348,8 +357,8 @@ LOrExp
     }
     ;
 
-LAndExp
-    : EqExp {
+LAndExp:
+    EqExp {
         auto l_and_exp = new LAndExpAST();
         l_and_exp->op = "";
         l_and_exp->eq_exp = unique_ptr<BaseAST>($1);
@@ -364,8 +373,8 @@ LAndExp
     }
     ;
 
-EqExp
-    : RelExp {
+EqExp:
+    RelExp {
         auto eq_exp = new EqExpAST();
         eq_exp->op = "";
         eq_exp->rel_exp = unique_ptr<BaseAST>($1);
@@ -380,8 +389,8 @@ EqExp
     }
     ;
 
-RelExp
-    : AddExp {
+RelExp:
+    AddExp {
         auto rel_exp = new RelExpAST();
         rel_exp->op = "";
         rel_exp->add_exp = unique_ptr<BaseAST>($1);
@@ -396,8 +405,8 @@ RelExp
     }
     ;
 
-AddExp
-    : MulExp {
+AddExp:
+    MulExp {
         auto add_exp = new AddExpAST();
         add_exp->op = "";
         add_exp->mul_exp = unique_ptr<BaseAST>($1);
@@ -412,8 +421,8 @@ AddExp
     }
     ;
 
-MulExp
-    : UnaryExp {
+MulExp:
+    UnaryExp {
         auto mul_exp = new MulExpAST();
         mul_exp->op = "";
         mul_exp->unary_exp = unique_ptr<BaseAST>($1);
@@ -428,8 +437,8 @@ MulExp
     }
     ;
 
-UnaryExp
-    : PrimaryExp {
+UnaryExp:
+    PrimaryExp {
         auto unary_exp = new UnaryExpAST();
         unary_exp->type = UnaryExpType::primary;
         unary_exp->exp = unique_ptr<BaseAST>($1);
@@ -444,8 +453,8 @@ UnaryExp
     }
     ;
 
-PrimaryExp
-    : '(' Exp ')' {
+PrimaryExp:
+    '(' Exp ')' {
         auto primary_exp = new PrimaryExpAST();
         primary_exp->type = PrimaryExpType::exp;
         primary_exp->exp = unique_ptr<BaseAST>($2);
@@ -465,15 +474,15 @@ PrimaryExp
     }
     ;
 
-LVal
-    : IDENT {
+LVal:
+    IDENT {
         string *lval = new string(*unique_ptr<string>($1));
         $$ = lval;
     }
     ;
 
-UNARYOP
-    : '+' {
+UNARYOP:
+    '+' {
         string *op = new string("+");
         $$ = op;
     }
@@ -487,8 +496,8 @@ UNARYOP
     }
     ;
 
-MULOP
-    : '*' {
+MULOP:
+    '*' {
         string *op = new string("*");
         $$ = op;
     }
@@ -502,8 +511,8 @@ MULOP
     }
     ;
 
-ADDOP
-    : '+' {
+ADDOP:
+    '+' {
         string *op = new string("+");
         $$ = op;
     }
@@ -513,8 +522,8 @@ ADDOP
     }
     ;
 
-RELOP
-    : LE {
+RELOP:
+    LE {
         string *op = new string("<=");
         $$ = op;
     }
@@ -532,8 +541,8 @@ RELOP
     }
     ;
 
-EQOP
-    : EQ {
+EQOP:
+    EQ {
         string *op = new string("==");
         $$ = op;
     }
@@ -543,15 +552,15 @@ EQOP
     }
     ;
 
-ANDOP
-    : AND {
+ANDOP:
+    AND {
         string *op = new string("&&");
         $$ = op;
     }
     ;
 
-OROP
-    : OR {
+OROP:
+    OR {
         string *op = new string("||");
         $$ = op;
     }
